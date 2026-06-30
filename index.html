@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Quehaceres de Casa</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1F2A24">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg: #1F2A24;
+    --surface: #283830;
+    --surface-2: #324438;
+    --gold: #E8B94A;
+    --coral: #E2725B;
+    --sage: #8FAE9B;
+    --cream: #F4F1E8;
+    --muted: #9FB0A6;
+    --line: rgba(244,241,232,0.10);
+    --radius: 14px;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--cream);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap{ max-width: 640px; margin: 0 auto; padding: 24px 18px 80px; }
+
+  header{ margin-bottom: 22px; }
+  .eyebrow{
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--sage); font-weight: 600; margin-bottom: 6px;
+  }
+  h1{
+    font-family: 'Fraunces', serif; font-weight: 700; font-size: 34px;
+    margin: 0 0 4px; letter-spacing: -0.01em;
+  }
+  .today{ color: var(--muted); font-size: 14px; }
+
+  .sync-status{
+    display:flex; align-items:center; gap:8px; margin-top:14px;
+    font-size: 12px; color: var(--muted);
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; background: var(--sage); flex-shrink:0; }
+  .dot.off{ background: var(--coral); }
+
+  .who-tabs{ display:flex; gap:8px; margin: 18px 0; }
+  .who-tab{
+    flex:1; padding: 10px 8px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600;
+    text-align:center; cursor:pointer; transition: all .15s ease;
+  }
+  .who-tab.active{ background: var(--gold); color: #1F2A24; border-color: var(--gold); }
+
+  .add-card{
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 22px;
+  }
+  .add-row{ display:flex; gap:8px; margin-bottom: 10px; }
+  .add-row:last-child{ margin-bottom: 0; }
+  input[type=text], select, input[type=date], input[type=time]{
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--cream);
+    border-radius: 8px; padding: 9px 10px; font-size: 14px; font-family: inherit;
+    outline: none; width: 100%;
+  }
+  input[type=text]:focus, select:focus, input[type=date]:focus, input[type=time]:focus{
+    border-color: var(--gold);
+  }
+  .add-row.title-row{ gap: 8px; }
+  .add-row.title-row input{ flex:1; }
+  .btn-add{
+    background: var(--gold); color: #1F2A24; border:none; border-radius:8px;
+    padding: 9px 16px; font-weight:700; font-size:14px; cursor:pointer; flex-shrink:0;
+  }
+  .btn-add:active{ transform: scale(0.97); }
+  .field{ flex:1; }
+  .field label{ display:block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .toggle-more{
+    background:none; border:none; color: var(--sage); font-size:12px; cursor:pointer;
+    padding: 4px 0; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .more-fields{ display:none; flex-wrap: wrap; gap: 8px; margin-top:10px; }
+  .more-fields.show{ display:flex; }
+  .more-fields .field{ min-width: 110px; }
+
+  .group{ margin-bottom: 22px; }
+  .group-title{
+    font-size: 12px; letter-spacing:.08em; text-transform: uppercase;
+    color: var(--muted); font-weight:700; margin: 0 0 10px 2px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .group-title::after{ content:""; flex:1; height:1px; background: var(--line); }
+
+  .task{
+    display:flex; align-items:flex-start; gap:12px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 13px 14px; margin-bottom: 9px; position: relative; overflow: hidden;
+  }
+  .task::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:4px; }
+  .task.tag-vos::before{ background: var(--gold); }
+  .task.tag-esposa::before{ background: var(--coral); }
+  .task.tag-ambos::before{ background: var(--sage); }
+  .task.done{ opacity: .45; }
+  .check{
+    width: 22px; height:22px; border-radius:6px; border: 2px solid var(--muted);
+    flex-shrink:0; cursor:pointer; margin-top: 1px; display:flex; align-items:center; justify-content:center;
+    font-size: 13px; color: transparent; transition: all .15s ease;
+  }
+  .check.checked{ background: var(--sage); border-color: var(--sage); color: #1F2A24; }
+  .task-body{ flex:1; min-width:0; }
+  .task-title{ font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .task.done .task-title{ text-decoration: line-through; }
+  .task-meta{ display:flex; flex-wrap:wrap; gap: 6px; align-items:center; }
+  .chip{ font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight:600; background: var(--surface-2); color: var(--muted); }
+  .chip.who{ color: #1F2A24; }
+  .chip.tag-vos.who{ background: var(--gold); }
+  .chip.tag-esposa.who{ background: var(--coral); }
+  .chip.tag-ambos.who{ background: var(--sage); }
+  .chip.due{ background: var(--surface-2); color: var(--cream); }
+  .chip.overdue{ background: var(--coral); color: #1F2A24; }
+  .chip.recurring{ background: transparent; border: 1px solid var(--line); }
+  .del{ background:none; border:none; color: var(--muted); cursor:pointer; font-size: 18px; padding: 2px 6px; flex-shrink:0; line-height: 1; }
+  .del:hover{ color: var(--coral); }
+
+  .empty{ text-align:center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
+  .empty .big{ font-family:'Fraunces',serif; font-size: 20px; color: var(--cream); margin-bottom:6px; }
+
+  .notif-banner{
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 14px; font-size: 13px; color: var(--muted); margin-bottom: 18px;
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+  }
+  .notif-banner button{ background: var(--gold); border:none; color:#1F2A24; font-weight:700; font-size:12px; padding: 6px 12px; border-radius:6px; cursor:pointer; flex-shrink:0; }
+
+  ::placeholder{ color: var(--muted); opacity: .7; }
+
+  @media (max-width:380px){ h1{ font-size: 28px; } .add-row{ flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Casa · Lista compartida</div>
+    <h1>Quehaceres</h1>
+    <div class="today" id="todayLabel"></div>
+    <div class="sync-status">
+      <span class="dot" id="syncDot"></span>
+      <span id="syncText">Conectando…</span>
+    </div>
+  </header>
+
+  <div class="notif-banner" id="notifBanner" style="display:none;">
+    <span>Activá las alertas para recibir avisos de tareas vencidas mientras tenés esta página abierta.</span>
+    <button onclick="requestNotif()">Activar</button>
+  </div>
+
+  <div class="who-tabs">
+    <div class="who-tab active" data-who="todos" onclick="setFilter('todos')">Todos</div>
+    <div class="who-tab" data-who="vos" onclick="setFilter('vos')">Vos</div>
+    <div class="who-tab" data-who="esposa" onclick="setFilter('esposa')">Esposa</div>
+  </div>
+
+  <div class="add-card">
+    <div class="add-row title-row">
+      <input type="text" id="newTitle" placeholder="Nueva tarea, ej: Sacar la basura" maxlength="120">
+      <button class="btn-add" onclick="addTask()">Agregar</button>
+    </div>
+    <button class="toggle-more" onclick="toggleMore()">+ Categoría, asignar, fecha y repetición</button>
+    <div class="more-fields" id="moreFields">
+      <div class="field">
+        <label>Categoría</label>
+        <select id="newCategory">
+          <option value="General">General</option>
+          <option value="Cocina">Cocina</option>
+          <option value="Limpieza">Limpieza</option>
+          <option value="Compras">Compras</option>
+          <option value="Finanzas">Finanzas</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Mascotas">Mascotas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Asignar a</label>
+        <select id="newAssignee">
+          <option value="ambos">Ambos</option>
+          <option value="vos">Vos</option>
+          <option value="esposa">Esposa</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Fecha</label>
+        <input type="date" id="newDate">
+      </div>
+      <div class="field">
+        <label>Hora</label>
+        <input type="time" id="newTime">
+      </div>
+      <div class="field">
+        <label>Repetir</label>
+        <select id="newRecurring">
+          <option value="none">No repetir</option>
+          <option value="daily">Todos los días</option>
+          <option value="weekly">Cada semana</option>
+          <option value="monthly">Cada mes</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="taskList"></div>
+</div>
+
+<script src="./config.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
