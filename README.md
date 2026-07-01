@@ -53,3 +53,22 @@ insert into tasks_store (id, data) values ('main', '[]');
 
 - El botón "Activar" pide permiso de notificaciones del navegador. Avisan cuando una tarea está vencida.
 - Limitación real de cualquier sitio web (no exclusiva de este): solo notifica mientras la página esté abierta en alguna pestaña o minimizada; si cerrás del todo el navegador, no llegan avisos. Eso solo lo hacen las apps nativas instaladas desde una tienda de apps.
+
+## 5. Novedades de esta versión
+
+- **Interfaz en francés**: toda la app se tradujo. Los nombres internos de categorías cambiaron (se sacó "Mantenimiento" y se agregó "Maison"), así que si tenías tareas viejas categorizadas como "Mantenimiento", vas a tener que reasignarles categoría a mano.
+- **Prioridad** (alta/media/baja) con un punto de color en cada tarea.
+- **Subtareas**: botón "➕ Sous-tâche" en cada tarea (usa un cuadro de diálogo simple del navegador para escribir el texto).
+- **Fotos adjuntas**: botón "📷 Photo" en cada tarea. Las fotos se comprimen automáticamente antes de guardarse, pero igual ocupan espacio en Supabase (plan gratuito da 500MB, de sobra para uso normal, pero evitá adjuntar decenas de fotos de alta resolución sin necesidad).
+- **Historial**: las tareas completadas ya no desaparecen, quedan en la sección plegable "Historique" al final de la lista, con botón para vaciarlo del todo si querés.
+- **Recordatorio anticipado configurable**: al crear una tarea con fecha, podés elegir avisar 1 día, 2 días o 1 semana antes del vencimiento (además del aviso de "vencida").
+- **Resumen diario y semanal**: si activaste las notificaciones, la app manda un resumen a la mañana (a partir de las 8am, la primera vez que la página esté abierta ese día) con las tareas del día, y un resumen los lunes con lo que viene en la semana.
+- **Rotación automática**: al crear una tarea recurrente asignada a Alejo o Najwa (no a "Ensemble"), podés tildar "Alterner" para que cada vez que se complete, la siguiente aparición se le asigne automáticamente a la otra persona.
+- **"Aujourd'hui uniquement"**: un interruptor arriba de la lista que filtra para mostrar solo lo que vence hoy (y lo que ya está vencido).
+- **Ajout rapide (plantillas)**: chips con tareas típicas para agregarlas con un solo toque.
+- **Lista de compras separada**: pestaña "Courses" arriba de todo, con su propia lista simple sin fecha ni categoría.
+
+### Importante sobre Supabase con esta versión
+
+La lista de compras se guarda en una fila nueva de la tabla `tasks_store` (con `id = 'shopping'`). **No necesitás correr ningún SQL adicional** — esa fila se crea sola automáticamente la primera vez que alguien agregue un artículo a la lista de compras.
+
