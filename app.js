@@ -83,13 +83,76 @@ async function pushRow(id, data) {
   } catch (e) { return false; }
 }
 
+// ---------- Merge logic ----------
+// Merges two arrays of items by ID. For items present in both, keeps the one
+// with the most recent modifiedAt (or completedAt/createdAt as fallback).
+// Items only in one side are always kept.
+function mergeById(localArr, cloudArr) {
+  const map = new Map();
+
+  // Start with everything from the cloud
+  (cloudArr || []).forEach(item => {
+    if (item && item.id) map.set(item.id, item);
+  });
+
+  // Overlay local items — keep local version if it's newer or equal
+  (localArr || []).forEach(item => {
+    if (!item || !item.id) return;
+    const existing = map.get(item.id);
+    if (!existing) {
+      // New local item not in cloud → keep it
+      map.set(item.id, item);
+    } else {
+      // Both exist → keep the one modified most recently
+      const localTime = item.modifiedAt || item.completedAt || item.createdAt || 0;
+      const cloudTime = existing.modifiedAt || existing.completedAt || existing.createdAt || 0;
+      if (localTime >= cloudTime) {
+        map.set(item.id, item);
+      }
+      // else keep the cloud version already in the map
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+// Deleted item IDs are tracked so that a delete on one device isn't "resurrected"
+// by the other device still having the item locally.
+const DELETED_TASKS_KEY = 'quehaceres-deleted-tasks';
+const DELETED_SHOPPING_KEY = 'quehaceres-deleted-shopping';
+
+function getDeletedIds(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key)) || []); }
+  catch (e) { return new Set(); }
+}
+function addDeletedId(key, id) {
+  const set = getDeletedIds(key);
+  set.add(id);
+  // Keep only last 500 to avoid unbounded growth
+  const arr = [...set].slice(-500);
+  localStorage.setItem(key, JSON.stringify(arr));
+}
+function filterDeleted(items, key) {
+  const deleted = getDeletedIds(key);
+  return items.filter(i => !deleted.has(i.id));
+}
+
 async function pullFromCloud() {
   if (!configured) return;
   setSyncStatus('loading');
   try {
-    const [mainData, shoppingData] = await Promise.all([pullRow('main'), pullRow('shopping')]);
-    if (mainData) { tasks = mainData; saveLocal(TASKS_KEY, tasks); }
-    if (shoppingData) { shopping = shoppingData; saveLocal(SHOPPING_KEY, shopping); }
+    const [cloudTasks, cloudShopping] = await Promise.all([pullRow('main'), pullRow('shopping')]);
+
+    if (cloudTasks) {
+      tasks = mergeById(tasks, cloudTasks);
+      tasks = filterDeleted(tasks, DELETED_TASKS_KEY);
+      saveLocal(TASKS_KEY, tasks);
+    }
+    if (cloudShopping) {
+      shopping = mergeById(shopping, cloudShopping);
+      shopping = filterDeleted(shopping, DELETED_SHOPPING_KEY);
+      saveLocal(SHOPPING_KEY, shopping);
+    }
     setSyncStatus('ok');
   } catch (e) {
     setSyncStatus('error');
@@ -97,20 +160,47 @@ async function pullFromCloud() {
   render();
 }
 
-async function pushTasksToCloud() {
+// Sync cycle: pull → merge → push the merged result back
+async function syncTasks() {
   saveLocal(TASKS_KEY, tasks);
   if (!configured) { setSyncStatus('noconfig'); return; }
+  if (!navigator.onLine) { setSyncStatus('error'); return; }
   setSyncStatus('saving');
-  const ok = await pushRow('main', tasks);
-  setSyncStatus(ok ? 'ok' : 'error');
+  try {
+    // Pull latest from cloud
+    const cloudTasks = await pullRow('main');
+    if (cloudTasks) {
+      tasks = mergeById(tasks, cloudTasks);
+      tasks = filterDeleted(tasks, DELETED_TASKS_KEY);
+    }
+    // Push merged result
+    const ok = await pushRow('main', tasks);
+    saveLocal(TASKS_KEY, tasks);
+    setSyncStatus(ok ? 'ok' : 'error');
+    render();
+  } catch (e) {
+    setSyncStatus('error');
+  }
 }
 
-async function pushShoppingToCloud() {
+async function syncShopping() {
   saveLocal(SHOPPING_KEY, shopping);
   if (!configured) { setSyncStatus('noconfig'); return; }
+  if (!navigator.onLine) { setSyncStatus('error'); return; }
   setSyncStatus('saving');
-  const ok = await pushRow('shopping', shopping);
-  setSyncStatus(ok ? 'ok' : 'error');
+  try {
+    const cloudShopping = await pullRow('shopping');
+    if (cloudShopping) {
+      shopping = mergeById(shopping, cloudShopping);
+      shopping = filterDeleted(shopping, DELETED_SHOPPING_KEY);
+    }
+    const ok = await pushRow('shopping', shopping);
+    saveLocal(SHOPPING_KEY, shopping);
+    setSyncStatus(ok ? 'ok' : 'error');
+    renderShopping();
+  } catch (e) {
+    setSyncStatus('error');
+  }
 }
 
 function setSyncStatus(state) {
@@ -164,10 +254,10 @@ async function addFromTemplate(i) {
   tasks.push({
     id: uid(), title: t.title, category: t.category, assignee: 'ambos', priority: 'medium',
     date: null, time: null, recurring: 'none', rotate: false, reminderOffset: 0,
-    subtasks: [], photo: null, done: false, completedAt: null, createdAt: Date.now()
+    subtasks: [], photo: null, done: false, completedAt: null, createdAt: Date.now(), modifiedAt: Date.now()
   });
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 // ---------- Task actions ----------
@@ -190,7 +280,8 @@ async function addTask() {
     photo: null,
     done: false,
     completedAt: null,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    modifiedAt: Date.now()
   });
   titleEl.value = '';
   document.getElementById('newDate').value = '';
@@ -201,7 +292,7 @@ async function addTask() {
   document.getElementById('newAssignee').value = 'ambos';
   document.getElementById('newRotate').checked = false;
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 async function toggleDone(id) {
@@ -209,6 +300,7 @@ async function toggleDone(id) {
   if (!t) return;
   t.done = !t.done;
   t.completedAt = t.done ? Date.now() : null;
+  t.modifiedAt = Date.now();
 
   if (t.done && t.recurring !== 'none' && t.date) {
     const d = new Date(t.date + 'T00:00:00');
@@ -230,24 +322,27 @@ async function toggleDone(id) {
       date: dateToStr(d),
       subtasks: (t.subtasks || []).map(s => ({ ...s, done: false })),
       photo: null,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      modifiedAt: Date.now()
     });
   }
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 async function deleteTask(id) {
+  addDeletedId(DELETED_TASKS_KEY, id);
   tasks = tasks.filter(x => x.id !== id);
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 async function clearHistory() {
   if (!confirm("Supprimer définitivement tout l'historique des tâches terminées ?")) return;
+  tasks.filter(t => t.done).forEach(t => addDeletedId(DELETED_TASKS_KEY, t.id));
   tasks = tasks.filter(t => !t.done);
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 // ---------- Subtasks ----------
@@ -258,8 +353,9 @@ async function addSubtask(taskId) {
   if (!text || !text.trim()) return;
   t.subtasks = t.subtasks || [];
   t.subtasks.push({ id: uid(), text: text.trim(), done: false });
+  t.modifiedAt = Date.now();
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 async function toggleSubtask(taskId, subId) {
@@ -268,16 +364,18 @@ async function toggleSubtask(taskId, subId) {
   const s = (t.subtasks || []).find(x => x.id === subId);
   if (!s) return;
   s.done = !s.done;
+  t.modifiedAt = Date.now();
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 async function deleteSubtask(taskId, subId) {
   const t = tasks.find(x => x.id === taskId);
   if (!t) return;
   t.subtasks = (t.subtasks || []).filter(x => x.id !== subId);
+  t.modifiedAt = Date.now();
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 // ---------- Photos ----------
@@ -319,8 +417,9 @@ async function onPhotoSelected(event) {
   try {
     const dataUrl = await compressImage(file);
     t.photo = dataUrl;
+    t.modifiedAt = Date.now();
     render();
-    await pushTasksToCloud();
+    await syncTasks();
   } catch (e) {
     alert("Impossible de traiter cette photo.");
   }
@@ -330,8 +429,9 @@ async function removePhoto(taskId) {
   const t = tasks.find(x => x.id === taskId);
   if (!t) return;
   t.photo = null;
+  t.modifiedAt = Date.now();
   render();
-  await pushTasksToCloud();
+  await syncTasks();
 }
 
 function showLightbox(src) {
@@ -347,24 +447,26 @@ async function addShoppingItem() {
   const el = document.getElementById('newShoppingItem');
   const text = el.value.trim();
   if (!text) return;
-  shopping.push({ id: uid(), text, done: false, createdAt: Date.now() });
+  shopping.push({ id: uid(), text, done: false, createdAt: Date.now(), modifiedAt: Date.now() });
   el.value = '';
   renderShopping();
-  await pushShoppingToCloud();
+  await syncShopping();
 }
 
 async function toggleShoppingItem(id) {
   const item = shopping.find(x => x.id === id);
   if (!item) return;
   item.done = !item.done;
+  item.modifiedAt = Date.now();
   renderShopping();
-  await pushShoppingToCloud();
+  await syncShopping();
 }
 
 async function deleteShoppingItem(id) {
+  addDeletedId(DELETED_SHOPPING_KEY, id);
   shopping = shopping.filter(x => x.id !== id);
   renderShopping();
-  await pushShoppingToCloud();
+  await syncShopping();
 }
 
 function renderShopping() {
@@ -585,7 +687,7 @@ function checkWeeklySummary() {
 render();
 pullFromCloud();
 setInterval(() => { pullFromCloud(); checkAlerts(); }, 30000);
-window.addEventListener('online', () => { pushTasksToCloud(); pushShoppingToCloud(); pullFromCloud(); });
+window.addEventListener('online', () => { syncTasks(); syncShopping(); pullFromCloud(); });
 window.addEventListener('offline', () => setSyncStatus('error'));
 
 document.getElementById('newTitle').addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
